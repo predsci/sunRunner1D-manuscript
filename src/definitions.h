@@ -35,7 +35,7 @@
 #define  BP_PERT                        8
 #define  CME_START_TIME                 9
 #define  CME_DURATION                   10
-#define  PROFILE                        11
+#define  OBS_LOC                        11
 
 /* [Beg] user-defined constants (do not change this line) */
 

@@ -49,7 +49,9 @@ void Init (double *v, double x1, double x2, double x3)
   v[VX1]  = g_inputParam[V_0];
   v[VX2]  = 0.0;
   v[VX3]  = 0.0;
-  v[PRS]  = v[RHO]*temp0/(KELVIN*mu);
+  #if HAVE_ENERGY
+   v[PRS]  = v[RHO]*temp0/(KELVIN*mu);
+  #endif
   v[TRC]  = 0.0;
 
   #if PHYSICS == MHD || PHYSICS == RMHD
@@ -89,7 +91,7 @@ void Analysis (const Data *d, Grid *grid)
  *********************************************************************** */
 {
     int i;
-    static int idx_1au;
+    static int idx_r1;
     
     double r0,r1,dr,dr_test;
     double mu = g_inputParam[MU_MMW];
@@ -97,39 +99,39 @@ void Analysis (const Data *d, Grid *grid)
 
     char  fname[512];
     char fname0[512];
-    FILE *fp, *fp0;
-    
     char fname1[512];
-    FILE *fp1;
+    FILE *fp, *fp0, *fp1;
+    
     static int first_call = 1;
     double cme_start_time = g_inputParam[CME_START_TIME];
-    double cme_duration = g_inputParam[CME_DURATION];
+    double cme_duration   = g_inputParam[CME_DURATION];
+    double obs_loc        = g_inputParam[OBS_LOC];
     double cme_end_time;
     static double r_x0[2];
     double r_x1[2], v_x0[2], h[2];
     double *** vr = d ->Vc[VX1];
     int ix0, ix1;
-    int idx0[2], idx1[2];
+    static int idx0[2], idx1[2];
     
-    sprintf (fname , "%s/obs_1au.dat",RuntimeGet()->output_dir);
-    sprintf (fname0,  "%s/obs_r0.dat",RuntimeGet()->output_dir);    
-    sprintf (fname1,  "%s/tracers.dat",RuntimeGet()->output_dir);
+    sprintf (fname , "%s/obs_r1.dat" ,RuntimeGet()->output_dir);
+    sprintf (fname0, "%s/obs_r0.dat" ,RuntimeGet()->output_dir);    
+    sprintf (fname1, "%s/tracers.dat",RuntimeGet()->output_dir);
     
     if (g_stepNumber == 0){ /* Open file for writing and compute idxat start only */
 
-      /* ---- Get grid point index closest to 1 AU ---- */
+      /* ---- Get grid point index closest to observer ---- */
 
-      idx_1au = 0;
+      idx_r1 = 0;
       dr=1e99;
       for (i=0; i<= NX1_TOT; i++){
-        dr_test = fabs(r[i]-1.0);
+        dr_test = fabs(r[i]-obs_loc);
         if (dr_test<dr){
           dr=dr_test;
-          idx_1au=i;
+          idx_r1=i;
         }
       }
       fp = fopen(fname,"w");
-      fprintf (fp,"Observer point at r[%d]=%12.6e AU\n",idx_1au,r[idx_1au]);
+      fprintf (fp,"Observer point at r[%d]=%12.6e AU\n",idx_r1,r[idx_r1]);
       fprintf (fp,"%7s %12s %12s %12s %12s %12s\n","time","vr","rho","temp","Bp","prs");
 
       fp0 = fopen(fname0,"w");
@@ -142,11 +144,11 @@ void Analysis (const Data *d, Grid *grid)
     }
 
     fprintf (fp,"%12.6e %12.6e %12.6e %12.6e %12.6e %12.6e\n",g_time,
-        d->Vc[VX1][0][0][idx_1au],
-        d->Vc[RHO][0][0][idx_1au],
-        (KELVIN*mu)*(d->Vc[PRS][0][0][idx_1au])/(d->Vc[RHO][0][0][idx_1au]),
-	     d->Vc[BX3][0][0][idx_1au],
-	     d->Vc[PRS][0][0][idx_1au]);   
+        d->Vc[VX1][0][0][idx_r1],
+        d->Vc[RHO][0][0][idx_r1],
+        (KELVIN*mu)*(d->Vc[PRS][0][0][idx_r1])/(d->Vc[RHO][0][0][idx_r1]),
+	     d->Vc[BX3][0][0][idx_r1],
+	     d->Vc[PRS][0][0][idx_r1]);   
     fclose(fp);
 
     fprintf (fp0,"%12.6e %12.6e %12.6e %12.6e %12.6e %12.6e\n",g_time,
@@ -172,7 +174,7 @@ void Analysis (const Data *d, Grid *grid)
     }
     if (g_time >= cme_start_time) {
         /* Locate the tracers on the grid, needed for the velocity interpolation */
-        for (i=0; i <= NX1_TOT; i++) {
+        for (i=0; i < NX1_TOT-1; i++) {
             if (r_x0[0] > r[i] && r_x0[0] < r[(i+1)]) {
                 idx0[0] = i-1;
                 idx1[0] = i;
@@ -189,9 +191,17 @@ void Analysis (const Data *d, Grid *grid)
             }
         }
         cme_end_time = cme_start_time + cme_duration;
-        
-        h[0] = (r_x0[0] - r[idx0[0]]) / (r[idx1[0]] - r[idx0[0]]);
-	h[1] = (r_x0[1] - r[idx0[1]]) / (r[idx1[1]] - r[idx0[1]]);
+        if (idx0[0] == idx1[0]) {
+	  h[0] = 0.;
+	    } else {
+	  h[0] = (r_x0[0] - r[idx0[0]]) / (r[idx1[0]] - r[idx0[0]]);
+	}
+
+	if (idx0[1] == idx1[1]) {
+	  h[1] = 0.0;
+	}  else {	  
+	  h[1] = (r_x0[1] - r[idx0[1]]) / (r[idx1[1]] - r[idx0[1]]);
+	}
 
 	/* Interpolate velocity */
 	
@@ -270,7 +280,7 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
 {
   int   i, j, k, nv;
 
-  double time_cme_stop, fact, factB;
+  double time_cme_stop, fact;
   double time_cme_start = g_inputParam[CME_START_TIME];
   double dt_cme         = g_inputParam[CME_DURATION];
   double v0             = g_inputParam[V_0];
@@ -281,9 +291,13 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
   double bp_pert        = g_inputParam[BP_PERT];
   double temp0          = g_inputParam[T_0];
   double mu             = g_inputParam[MU_MMW];
-  int    profile        = g_inputParam[PROFILE];
+  
 
   time_cme_stop  = time_cme_start + dt_cme;
+
+  if (side == 0) {    /* -- check solution inside domain -- */
+    DOM_LOOP(k,j,i){};
+  }
 
   if (side == X1_BEG){  /* -- X1_BEG boundary -- */
         if ( (g_time < time_cme_start) || (g_time > time_cme_stop) ){
@@ -291,25 +305,87 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
             d->Vc[RHO][k][j][i] = rho0; // Density at r=r0
             d->Vc[VX1][k][j][i] = v0;   // Speed at r=r0 km/s
             d->Vc[PRS][k][j][i] = d->Vc[RHO][k][j][i]*temp0/(KELVIN*mu);   // Thermal pressure at r=r0
-            d->Vc[BX3][k][j][i] = bp0; // B-phi at r=r0
+            d->Vc[BX3][k][j][i] = bp0; // B-phi
           }
         }else{
-
-	  fact = pow(sin((g_time-time_cme_start)*CONST_PI/dt_cme),2);
-	  if (profile == 0) {
-	    factB = fact; 
-	  } else {
-	    factB = sin((g_time-time_cme_start)*2*CONST_PI/dt_cme);
-	  } 
-          /*fact = pow(sin((g_time-time_cme_start)*CONST_PI/dt_cme),2);
-	    factB = sin((g_time-time_cme_start)*2*CONST_PI/dt_cme); */
+          fact = pow(sin((g_time-time_cme_start)*CONST_PI/dt_cme),2);
           X1_BEG_LOOP(k,j,i) {
             d->Vc[RHO][k][j][i] = rho0 + fact*rho_pert;  // Density at r=r0
             d->Vc[VX1][k][j][i] = v0   + fact*v_pert;    // Velocity at r=r0
             d->Vc[PRS][k][j][i] = d->Vc[RHO][k][j][i]*temp0/(KELVIN*mu); // Thermal pressure at r=r0
-            d->Vc[BX3][k][j][i] = bp0  + factB*bp_pert; //B-phi at r=r0
-	  }
-	}
+            d->Vc[BX3][k][j][i] = bp0  + fact*bp_pert; //B-phi
+	        }
+	      }
+
+    if (box->vpos == CENTER) {
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X1FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X2FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X3FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }
+  }
+
+  if (side == X1_END){  /* -- X1_END boundary -- */
+    if (box->vpos == CENTER) {
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X1FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X2FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X3FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }
+  }
+
+  if (side == X2_BEG){  /* -- X2_BEG boundary -- */
+    if (box->vpos == CENTER) {
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X1FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X2FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X3FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }
+  }
+
+  if (side == X2_END){  /* -- X2_END boundary -- */
+    if (box->vpos == CENTER) {
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X1FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X2FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X3FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }
+  }
+
+  if (side == X3_BEG){  /* -- X3_BEG boundary -- */
+    if (box->vpos == CENTER) {
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X1FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X2FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X3FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }
+  }
+
+  if (side == X3_END){  /* -- X3_END boundary -- */
+    if (box->vpos == CENTER) {
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X1FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X2FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }else if (box->vpos == X3FACE){
+      BOX_LOOP(box,k,j,i){  }
+    }
   }
 }
 
