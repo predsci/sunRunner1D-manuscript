@@ -89,6 +89,23 @@ DATA
 The observations for events 1-4 are in the data/eventX_obs.csv files [X=1,2,3,4]
 
 
+FIGS-PDF
+
+The figs-pdf directory includes pdf files of events 1-5 with the following name convention:
+
+eventX_ts.pdf - Time series comparison between the model and observation (e.g, figure 1 in manuscript)
+
+eventX_bc.pdf - Boundary conditions for the event (e.g., figure 2 in manuscript)
+
+eventX_r.pdf - Radial speed, radial density, transverse magnetic field and tempearture as a function of heliospheric
+distance for three snapshots in time (e.g., figure 3 in manuscript)
+
+eventX_bc.pdf - The width of the ICME as function of heliospheric distance (e.g., figure 4 in manuscript)
+
+eventX_2d.pdf - Radial speed, radial density, transverse magnetic field and tempearture as a function of time (x-axis) and
+heliospheric distance (y-axis, e.g, figure 5 in manuscript)
+
+
 HELP and SUPPORT
 
 For questions and/or help please email us: pete@predsci.com, mbennun@predsci.com
